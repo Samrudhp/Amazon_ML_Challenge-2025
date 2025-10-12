@@ -5,19 +5,19 @@ Configuration file for Smart Product Pricing ML Pipeline
 import os
 
 # Paths
-DATA_DIR = "../dataset"
+DATA_DIR = "dataset"
 TRAIN_PATH = os.path.join(DATA_DIR, "train.csv")
 TEST_PATH = os.path.join(DATA_DIR, "test.csv")
 SAMPLE_OUT_PATH = os.path.join(DATA_DIR, "sample_test_out.csv")
 OUTPUT_PATH = os.path.join(DATA_DIR, "test_out.csv")
 
 # Image paths
-IMAGE_DIR = "../images"
+IMAGE_DIR = "images"
 TRAIN_IMAGE_DIR = os.path.join(IMAGE_DIR, "train")
 TEST_IMAGE_DIR = os.path.join(IMAGE_DIR, "test")
 
 # Cache paths
-CACHE_DIR = "../cache"
+CACHE_DIR = "cache"
 TEXT_EMB_TRAIN = os.path.join(CACHE_DIR, "text_emb_train.npy")
 TEXT_EMB_TEST = os.path.join(CACHE_DIR, "text_emb_test.npy")
 IMAGE_EMB_TRAIN = os.path.join(CACHE_DIR, "image_emb_train.npy")
@@ -43,6 +43,8 @@ IMAGE_DIM_REDUCED = 256
 # RAG parameters
 RAG_K = 10  # Number of neighbors
 FAISS_USE_GPU = False
+RAG_USE_ADVANCED = True  # Enable advanced RAG features
+RAG_N_CATEGORIES = 20  # Number of pseudo-categories for category-specific retrieval
 
 # LightGBM parameters
 LGB_PARAMS = {

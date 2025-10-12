@@ -86,7 +86,8 @@ def main():
     # Compute RAG features
     X_test_rag = compute_rag_features(
         train_fused, test_fused, y_train,
-        k=RAG_K, use_gpu=FAISS_USE_GPU
+        k=RAG_K, use_gpu=FAISS_USE_GPU,
+        use_advanced_features=RAG_USE_ADVANCED, n_categories=RAG_N_CATEGORIES
     )
     
     # For training, we need to compute RAG features using leave-one-out or pseudo-labeling
@@ -94,7 +95,8 @@ def main():
     print("\nComputing training RAG features...")
     X_train_rag = compute_rag_features(
         train_fused, train_fused, y_train,
-        k=RAG_K + 1, use_gpu=FAISS_USE_GPU
+        k=RAG_K + 1, use_gpu=FAISS_USE_GPU,
+        use_advanced_features=RAG_USE_ADVANCED, n_categories=RAG_N_CATEGORIES
     )
     
     # ========== STEP 6: Feature Fusion ==========
@@ -148,7 +150,9 @@ def main():
         train_fused, y_train,
         test_fused,
         n_clusters=N_CLUSTERS,
-        use_quantile_mapping=True
+        use_quantile_mapping=True,
+        use_advanced_calibration=True,
+        use_ensemble_calibration=True
     )
     
     print(f"Final predictions range: [{final_predictions.min():.2f}, {final_predictions.max():.2f}]")

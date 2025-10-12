@@ -74,8 +74,10 @@ def inference():
     
     # Compute RAG features
     print("\nComputing RAG features...")
-    X_test_rag = compute_rag_features(train_fused, test_fused, y_train, k=RAG_K)
-    X_train_rag = compute_rag_features(train_fused, train_fused, y_train, k=RAG_K + 1)
+    X_test_rag = compute_rag_features(train_fused, test_fused, y_train, k=RAG_K,
+                                     use_advanced_features=RAG_USE_ADVANCED, n_categories=RAG_N_CATEGORIES)
+    X_train_rag = compute_rag_features(train_fused, train_fused, y_train, k=RAG_K + 1,
+                                       use_advanced_features=RAG_USE_ADVANCED, n_categories=RAG_N_CATEGORIES)
     
     # Fuse all features
     X_test_full = np.hstack([text_emb_test, image_emb_test, X_test_numeric, X_test_rag])

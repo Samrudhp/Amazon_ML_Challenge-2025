@@ -60,35 +60,41 @@ def load_image_safe(image_path, default_size=(224, 224)):
 def generate_image_embeddings(image_paths, model_name, batch_size=16, device='cpu'):
     """Generate image embeddings using CLIP"""
     print(f"Generating image embeddings using {model_name}...")
-    
-    # Load CLIP model
+
+    # Load CLIP model and processor once
     model = CLIPModel.from_pretrained(model_name)
     processor = CLIPProcessor.from_pretrained(model_name)
     model.to(device)
     model.eval()
-    
+
     embeddings = []
-    
+    total_images = len(image_paths)
+
+    print(f"Processing {total_images} images in batches of {batch_size}...")
+
     with torch.no_grad():
-        for i in tqdm(range(0, len(image_paths), batch_size)):
+        for i in tqdm(range(0, total_images, batch_size), desc="CLIP embeddings"):
             batch_paths = image_paths[i:i+batch_size]
-            
-            # Load images
-            images = [load_image_safe(path) for path in batch_paths]
-            
-            # Process images
+
+            # Load and preprocess images
+            images = []
+            for path in batch_paths:
+                img = load_image_safe(path)
+                images.append(img)
+
+            # Process batch
             inputs = processor(images=images, return_tensors="pt", padding=True)
             inputs = {k: v.to(device) for k, v in inputs.items()}
-            
+
             # Get embeddings
             outputs = model.get_image_features(**inputs)
             batch_emb = outputs.cpu().numpy()
-            
+
             embeddings.append(batch_emb)
-    
+
     embeddings = np.vstack(embeddings)
     print(f"Image embeddings shape: {embeddings.shape}")
-    
+
     return embeddings
 
 def get_image_paths(df, image_dir, download_images_func=None):
@@ -98,9 +104,19 @@ def get_image_paths(df, image_dir, download_images_func=None):
     image_paths = []
     
     # Download images if function provided
-    if download_images_func is not None and not os.path.exists(image_dir):
-        print(f"Downloading images to {image_dir}...")
-        download_images_func(df['image_link'].tolist(), image_dir)
+    if download_images_func is not None:
+        # Check if we need to download (directory doesn't exist or doesn't have enough images)
+        expected_images = len(df)
+        existing_images = 0
+        if os.path.exists(image_dir):
+            existing_images = len([f for f in os.listdir(image_dir) 
+                                 if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+        
+        if not os.path.exists(image_dir) or existing_images < expected_images * 0.8:  # 80% threshold
+            print(f"Downloading {expected_images} images to {image_dir}...")
+            download_images_func(df['image_link'].tolist(), image_dir)
+        else:
+            print(f"Using existing {existing_images} images in {image_dir}")
     
     # Build image paths
     for link in df['image_link']:
