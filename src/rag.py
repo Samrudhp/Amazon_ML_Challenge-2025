@@ -112,15 +112,20 @@ def create_faiss_index(embeddings, use_gpu=False):
     return index, embeddings_norm
 
 def build_fused_features(text_emb, image_emb, numeric_features):
-    """Fuse multimodal features"""
+    """Fuse multimodal features with robust scaling for numeric features"""
+    from sklearn.preprocessing import RobustScaler
+
     # Normalize each modality
     text_norm = StandardScaler().fit_transform(text_emb)
     image_norm = StandardScaler().fit_transform(image_emb)
-    numeric_norm = StandardScaler().fit_transform(numeric_features)
-    
+
+    # Use RobustScaler for numeric features to handle extreme values
+    numeric_scaler = RobustScaler()
+    numeric_norm = numeric_scaler.fit_transform(numeric_features)
+
     # Concatenate
     fused = np.hstack([text_norm, image_norm, numeric_norm])
-    
+
     return fused
 
 def compute_rag_features(
@@ -231,8 +236,12 @@ def compute_rag_features(
         price_iqr = np.subtract(*np.percentile(neighbor_prices, [75, 25]))
 
         # Higher-order moments
-        price_skewness = skew(neighbor_prices) if len(neighbor_prices) > 2 else 0
-        price_kurtosis = kurtosis(neighbor_prices) if len(neighbor_prices) > 2 else 0
+        if len(neighbor_prices) > 2 and np.std(neighbor_prices) > 1e-8:
+            price_skewness = skew(neighbor_prices)
+            price_kurtosis = kurtosis(neighbor_prices)
+        else:
+            price_skewness = 0.0
+            price_kurtosis = 0.0
 
         # Quantiles
         q10 = np.percentile(neighbor_prices, 10)
@@ -241,7 +250,7 @@ def compute_rag_features(
         q90 = np.percentile(neighbor_prices, 90)
 
         # Confidence interval (assuming normal distribution)
-        confidence_interval = 1.96 * std_price / np.sqrt(len(neighbor_prices))
+        confidence_interval = 1.96 * std_price / np.sqrt(len(neighbor_prices)) if std_price > 1e-8 else 0.0
 
         # Distance-based features
         mean_distance = np.mean(neighbor_distances)

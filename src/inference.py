@@ -84,7 +84,7 @@ def inference():
     
     # Load models
     try:
-        lgb_models, ridge_model, _ = load_models()
+        lgb_models, ridge_model, _, use_deep_mlp, scaler = load_models()
     except FileNotFoundError as e:
         print(f"\n⚠️  {e}")
         print("Running full training pipeline instead...")
@@ -94,7 +94,7 @@ def inference():
     
     # Predict
     print("\nMaking predictions...")
-    predictions = predict_full_pipeline(lgb_models, ridge_model, X_test_full)
+    predictions = predict_full_pipeline(lgb_models, ridge_model, X_test_full, use_deep_mlp=use_deep_mlp, scaler=scaler)
     
     # Post-process
     print("\nPost-processing...")

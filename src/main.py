@@ -120,40 +120,71 @@ def main():
     
     print(f"Final feature shape - Train: {X_train_full.shape}, Test: {X_test_full.shape}")
     
-    # ========== STEP 7 & 8: Train LightGBM + Ridge ==========
+    # ========== STEP 7 & 8: Train LightGBM + Ridge Ensemble ==========
     print("\n" + "=" * 80)
-    print("STEP 7 & 8: Training LightGBM + Ridge Meta-Model")
+    print("STEP 7 & 8: Training LightGBM + Ridge Ensemble")
     print("=" * 80)
+
+    # Train ensemble with multiple seeds
+    all_models = []
+    all_ridge_models = []
+    all_feature_importances = []
+    all_oof_predictions = []
+    all_test_predictions = []
+
+    for seed_idx in range(N_SEEDS):
+        current_seed = RANDOM_SEED + seed_idx
+        print(f"\n--- Training seed {seed_idx + 1}/{N_SEEDS} (seed={current_seed}) ---")
+
+        lgb_models, ridge_model, feature_importance, scaler = train_full_pipeline(
+            X_train_full, y_train,
+            LGB_PARAMS, LGB_NUM_ROUNDS, LGB_EARLY_STOPPING,
+            N_FOLDS, RIDGE_ALPHA, current_seed,
+            use_deep_mlp=USE_DEEP_MLP, mlp_hidden_dims=MLP_HIDDEN_DIMS,
+            mlp_dropout_rate=MLP_DROPOUT_RATE, mlp_learning_rate=MLP_LEARNING_RATE,
+            mlp_batch_size=MLP_BATCH_SIZE, mlp_num_epochs=MLP_NUM_EPOCHS,
+            mlp_patience=MLP_EARLY_STOPPING_PATIENCE
+        )
+
+        # Store models
+        all_models.append(lgb_models)
+        all_ridge_models.append(ridge_model)
+        all_feature_importances.append(feature_importance)
+
+        # Get predictions for this seed
+        seed_predictions = predict_full_pipeline(lgb_models, ridge_model, X_test_full,
+                                                use_deep_mlp=USE_DEEP_MLP, mlp_batch_size=MLP_BATCH_SIZE)
+        all_test_predictions.append(seed_predictions)
+
+    # Average predictions across seeds
+    predictions = np.mean(all_test_predictions, axis=0)
+    feature_importance = np.mean(all_feature_importances, axis=0)
+
+    # Use the last trained models for saving (they're equivalent)
+    lgb_models, ridge_model = all_models[-1], all_ridge_models[-1]
+
+    print(f"Ensemble predictions range: [{predictions.min():.2f}, {predictions.max():.2f}]")
+    print(f"Ensemble predictions mean: {predictions.mean():.2f}, median: {np.median(predictions):.2f}")
     
-    lgb_models, ridge_model, feature_importance = train_full_pipeline(
-        X_train_full, y_train,
-        LGB_PARAMS, LGB_NUM_ROUNDS, LGB_EARLY_STOPPING,
-        N_FOLDS, RIDGE_ALPHA, RANDOM_SEED
-    )
-    
-    # ========== STEP 9: Predictions ==========
-    print("\n" + "=" * 80)
-    print("STEP 9: Making Predictions")
-    print("=" * 80)
-    
-    predictions = predict_full_pipeline(lgb_models, ridge_model, X_test_full)
-    print(f"Raw predictions range: [{predictions.min():.2f}, {predictions.max():.2f}]")
-    print(f"Raw predictions mean: {predictions.mean():.2f}, median: {np.median(predictions):.2f}")
-    
-    # ========== STEP 10: Post-Processing ==========
+    # ========== STEP 10: Post-Processing & Calibration ==========
     print("\n" + "=" * 80)
     print("STEP 10: Post-Processing & Calibration")
     print("=" * 80)
     
-    final_predictions = post_process_predictions(
-        predictions,
-        train_fused, y_train,
-        test_fused,
-        n_clusters=N_CLUSTERS,
-        use_quantile_mapping=True,
-        use_advanced_calibration=True,
-        use_ensemble_calibration=True
-    )
+    if USE_DEEP_MLP:
+        # Skip post-processing for Deep MLP as it's designed for LightGBM
+        print("Skipping post-processing for Deep MLP predictions...")
+        final_predictions = predictions
+    else:
+        final_predictions = post_process_predictions(
+            predictions,
+            train_fused, y_train,
+            test_fused,
+            n_clusters=N_CLUSTERS,
+            use_quantile_mapping=True,
+            use_advanced_calibration=True,
+            use_ensemble_calibration=True
+        )
     
     print(f"Final predictions range: [{final_predictions.min():.2f}, {final_predictions.max():.2f}]")
     print(f"Final predictions mean: {final_predictions.mean():.2f}, median: {np.median(final_predictions):.2f}")
@@ -171,6 +202,9 @@ def main():
         pickle.dump({
             'lgb_models': lgb_models,
             'ridge_model': ridge_model,
+            'feature_importance': feature_importance,
+            'scaler': scaler,
+            'use_deep_mlp': USE_DEEP_MLP,
             'train_data': {
                 'fused': train_fused,
                 'prices': y_train

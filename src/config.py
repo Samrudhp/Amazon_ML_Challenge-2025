@@ -26,7 +26,7 @@ IMAGE_EMB_TEST = os.path.join(CACHE_DIR, "image_emb_test.npy")
 # Model parameters
 RANDOM_SEED = 42
 N_FOLDS = 5
-N_SEEDS = 1  # Can increase to 3-5 for ensemble
+N_SEEDS = 3  # Increased from 1 for ensemble averaging
 
 # Text embedding
 TEXT_MODEL = "all-MiniLM-L6-v2"
@@ -46,28 +46,39 @@ FAISS_USE_GPU = False
 RAG_USE_ADVANCED = True  # Enable advanced RAG features
 RAG_N_CATEGORIES = 20  # Number of pseudo-categories for category-specific retrieval
 
-# LightGBM parameters
+# LightGBM parameters - Optimized for better performance
 LGB_PARAMS = {
     'objective': 'regression',
     'metric': 'mae',
-    'num_leaves': 31,
-    'max_depth': -1,
-    'learning_rate': 0.03,
-    'feature_fraction': 0.8,
-    'bagging_fraction': 0.8,
+    'num_leaves': 100,  # Increased from 31 for more complex trees
+    'max_depth': 12,    # Limited depth to prevent overfitting
+    'learning_rate': 0.01,  # Lower learning rate for better convergence
+    'feature_fraction': 0.9,  # Use more features per tree
+    'bagging_fraction': 0.9,  # Use more data per tree
     'bagging_freq': 5,
-    'lambda_l1': 0.1,
-    'lambda_l2': 0.1,
+    'lambda_l1': 0.5,  # Increased L1 regularization
+    'lambda_l2': 0.5,  # Increased L2 regularization
+    'min_data_in_leaf': 20,  # Minimum samples per leaf
+    'min_sum_hessian_in_leaf': 1e-3,  # Minimum hessian per leaf
     'num_threads': 4,
     'verbosity': -1,
     'seed': RANDOM_SEED
 }
 
-LGB_NUM_ROUNDS = 2000
-LGB_EARLY_STOPPING = 100
+LGB_NUM_ROUNDS = 5000  # Increased from 2000 for lower learning rate
+LGB_EARLY_STOPPING = 200  # Increased patience for convergence
 
 # Ridge parameters
 RIDGE_ALPHA = 1.0
 
 # Post-processing
 N_CLUSTERS = 50  # For cluster-based calibration
+
+# Deep MLP parameters
+USE_DEEP_MLP = False
+MLP_HIDDEN_DIMS = [512, 256, 128, 64]  # Hidden layer dimensions
+MLP_DROPOUT_RATE = 0.3
+MLP_LEARNING_RATE = 1e-3
+MLP_BATCH_SIZE = 1024
+MLP_NUM_EPOCHS = 100
+MLP_EARLY_STOPPING_PATIENCE = 10
