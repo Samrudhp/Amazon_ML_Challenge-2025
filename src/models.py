@@ -149,6 +149,155 @@ def predict_lightgbm_ensemble(models, X_test):
     
     return predictions
 
+# ========== CatBoost Functions ==========
+
+def train_catboost_cv(X_train, y_train_log, catboost_params, num_rounds, early_stopping_rounds,
+                     n_folds, random_state=42):
+    """Train CatBoost with cross-validation"""
+    try:
+        from catboost import CatBoostRegressor, Pool
+    except ImportError:
+        raise ImportError("CatBoost not installed. Install with: pip install catboost")
+    
+    # Create stratified folds
+    bins = pd.qcut(y_train_log, q=n_folds, labels=False, duplicates='drop')
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+    
+    oof_predictions = np.zeros(len(X_train))
+    models = []
+    fold_scores = []
+    
+    for fold, (train_idx, val_idx) in enumerate(skf.split(X_train, bins)):
+        print(f"\n--- CatBoost Fold {fold + 1}/{n_folds} ---")
+        
+        X_fold_train, X_fold_val = X_train[train_idx], X_train[val_idx]
+        y_fold_train, y_fold_val = y_train_log[train_idx], y_train_log[val_idx]
+        
+        # Create CatBoost pools
+        train_pool = Pool(X_fold_train, y_fold_train)
+        val_pool = Pool(X_fold_val, y_fold_val)
+        
+        # Train CatBoost
+        model = CatBoostRegressor(
+            **catboost_params,
+            iterations=num_rounds,
+            early_stopping_rounds=early_stopping_rounds,
+            random_seed=random_state + fold,
+            verbose=100
+        )
+        
+        model.fit(train_pool, eval_set=val_pool)
+        
+        # Predictions
+        fold_preds = model.predict(X_fold_val)
+        oof_predictions[val_idx] = fold_preds
+        
+        # Calculate SMAPE
+        fold_smape = smape(np.expm1(y_fold_val), np.expm1(fold_preds))
+        fold_scores.append(fold_smape)
+        print(f"CatBoost Fold {fold + 1} SMAPE: {fold_smape:.4f}")
+        
+        models.append(model)
+    
+    oof_smape = smape(np.expm1(y_train_log), np.expm1(oof_predictions))
+    print(f"\n=== CatBoost Overall OOF SMAPE: {oof_smape:.4f} ===")
+    print(f"Fold scores: {fold_scores}")
+    print(f"Std: {np.std(fold_scores):.4f}")
+    
+    return models, oof_predictions, oof_smape
+
+def predict_catboost_ensemble(models, X_test):
+    """Predict using ensemble of CatBoost models"""
+    try:
+        from catboost import Pool
+    except ImportError:
+        raise ImportError("CatBoost not installed. Install with: pip install catboost")
+    
+    predictions = np.zeros(len(X_test))
+    
+    for model in models:
+        predictions += model.predict(X_test)
+    
+    predictions /= len(models)
+    
+    return predictions
+
+# ========== XGBoost Functions ==========
+
+def train_xgboost_cv(X_train, y_train_log, xgboost_params, num_rounds, early_stopping_rounds,
+                    n_folds, random_state=42):
+    """Train XGBoost with cross-validation"""
+    try:
+        import xgboost as xgb
+    except ImportError:
+        raise ImportError("XGBoost not installed. Install with: pip install xgboost")
+    
+    # Create stratified folds
+    bins = pd.qcut(y_train_log, q=n_folds, labels=False, duplicates='drop')
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+    
+    oof_predictions = np.zeros(len(X_train))
+    models = []
+    fold_scores = []
+    
+    for fold, (train_idx, val_idx) in enumerate(skf.split(X_train, bins)):
+        print(f"\n--- XGBoost Fold {fold + 1}/{n_folds} ---")
+        
+        X_fold_train, X_fold_val = X_train[train_idx], X_train[val_idx]
+        y_fold_train, y_fold_val = y_train_log[train_idx], y_train_log[val_idx]
+        
+        # Create XGBoost DMatrix
+        dtrain = xgb.DMatrix(X_fold_train, label=y_fold_train)
+        dval = xgb.DMatrix(X_fold_val, label=y_fold_val)
+        
+        # Train XGBoost
+        params = xgboost_params.copy()
+        params['seed'] = random_state + fold
+        
+        model = xgb.train(
+            params,
+            dtrain,
+            num_boost_round=num_rounds,
+            evals=[(dtrain, 'train'), (dval, 'valid')],
+            early_stopping_rounds=early_stopping_rounds,
+            verbose_eval=100
+        )
+        
+        # Predictions
+        fold_preds = model.predict(dval)
+        oof_predictions[val_idx] = fold_preds
+        
+        # Calculate SMAPE
+        fold_smape = smape(np.expm1(y_fold_val), np.expm1(fold_preds))
+        fold_scores.append(fold_smape)
+        print(f"XGBoost Fold {fold + 1} SMAPE: {fold_smape:.4f}")
+        
+        models.append(model)
+    
+    oof_smape = smape(np.expm1(y_train_log), np.expm1(oof_predictions))
+    print(f"\n=== XGBoost Overall OOF SMAPE: {oof_smape:.4f} ===")
+    print(f"Fold scores: {fold_scores}")
+    print(f"Std: {np.std(fold_scores):.4f}")
+    
+    return models, oof_predictions, oof_smape
+
+def predict_xgboost_ensemble(models, X_test):
+    """Predict using ensemble of XGBoost models"""
+    try:
+        import xgboost as xgb
+    except ImportError:
+        raise ImportError("XGBoost not installed. Install with: pip install xgboost")
+    
+    predictions = np.zeros(len(X_test))
+    
+    for model in models:
+        dtest = xgb.DMatrix(X_test)
+        predictions += model.predict(dtest)
+    
+    predictions /= len(models)
+    
+    return predictions
+
 def train_ridge_meta(oof_predictions, additional_features, y_train, alpha=1.0):
     """Train Ridge meta-model on OOF predictions"""
     print(f"\nTraining Ridge meta-model (alpha={alpha})...")

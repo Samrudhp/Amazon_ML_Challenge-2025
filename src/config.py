@@ -26,7 +26,7 @@ IMAGE_EMB_TEST = os.path.join(CACHE_DIR, "image_emb_test.npy")
 # Model parameters
 RANDOM_SEED = 42
 N_FOLDS = 5
-N_SEEDS = 3  # Increased from 1 for ensemble averaging
+N_SEEDS = 1  # Single seed for faster training
 
 # Text embedding
 TEXT_MODEL = "all-MiniLM-L6-v2"

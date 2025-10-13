@@ -6,6 +6,7 @@ import os
 import sys
 import numpy as np
 import pandas as pd
+import pickle
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -14,7 +15,7 @@ from config import *
 from preprocessing import load_and_clean_data, get_numeric_feature_names
 from embeddings import generate_and_cache_embeddings
 from rag import build_fused_features, compute_rag_features, get_rag_feature_names
-from models import train_full_pipeline, predict_full_pipeline
+from models import (train_full_pipeline, predict_full_pipeline)
 from postprocessing import post_process_predictions
 
 # Import utils for image downloading
@@ -120,22 +121,65 @@ def main():
     
     print(f"Final feature shape - Train: {X_train_full.shape}, Test: {X_test_full.shape}")
     
+    # ========== STEP 6.5: Feature Selection ==========
+    print("\n" + "=" * 80)
+    print("STEP 6.5: Feature Selection")
+    print("=" * 80)
+    
+    # Try to load pre-computed selected feature indices
+    feature_selection_enabled = True
+    selected_indices = None
+    
+    if feature_selection_enabled:
+        try:
+            # First try to load pre-selected indices
+            selected_indices_path = os.path.join(CACHE_DIR, 'selected_feature_indices.npy')
+            if os.path.exists(selected_indices_path):
+                selected_indices = np.load(selected_indices_path)
+                print(f"Loaded pre-selected {len(selected_indices)} feature indices")
+            else:
+                # Fallback: compute from previous model
+                with open(os.path.join(CACHE_DIR, 'trained_models.pkl'), 'rb') as f:
+                    prev_models = pickle.load(f)
+                    prev_importance = prev_models['feature_importance']
+                    
+                    # Keep top N most important features (configurable)
+                    N_FEATURES_TO_KEEP = 250  # Keep top 250 features
+                    if len(prev_importance) > N_FEATURES_TO_KEEP:
+                        # Get indices of top N features
+                        top_indices = np.argsort(prev_importance)[-N_FEATURES_TO_KEEP:]
+                        selected_indices = np.sort(top_indices)
+                        print(f"Computed and selected {N_FEATURES_TO_KEEP} most important features")
+                    else:
+                        print("Not enough features to select from, keeping all features")
+            
+            if selected_indices is not None:
+                # Filter features
+                X_train_full = X_train_full[:, selected_indices]
+                X_test_full = X_test_full[:, selected_indices]
+                
+                print(f"Applied feature selection - reduced to {len(selected_indices)} features")
+                print(f"Reduced feature shape - Train: {X_train_full.shape}, Test: {X_test_full.shape}")
+                
+        except (FileNotFoundError, KeyError, ValueError) as e:
+            print(f"No feature selection data found ({e}), keeping all features")
+    
     # ========== STEP 7 & 8: Train LightGBM + Ridge Ensemble ==========
     print("\n" + "=" * 80)
     print("STEP 7 & 8: Training LightGBM + Ridge Ensemble")
     print("=" * 80)
 
     # Train ensemble with multiple seeds
-    all_models = []
+    all_lgb_models = []
     all_ridge_models = []
     all_feature_importances = []
-    all_oof_predictions = []
     all_test_predictions = []
 
     for seed_idx in range(N_SEEDS):
         current_seed = RANDOM_SEED + seed_idx
         print(f"\n--- Training seed {seed_idx + 1}/{N_SEEDS} (seed={current_seed}) ---")
 
+        # Train LightGBM + Ridge ensemble
         lgb_models, ridge_model, feature_importance, scaler = train_full_pipeline(
             X_train_full, y_train,
             LGB_PARAMS, LGB_NUM_ROUNDS, LGB_EARLY_STOPPING,
@@ -147,7 +191,7 @@ def main():
         )
 
         # Store models
-        all_models.append(lgb_models)
+        all_lgb_models.append(lgb_models)
         all_ridge_models.append(ridge_model)
         all_feature_importances.append(feature_importance)
 
@@ -161,7 +205,7 @@ def main():
     feature_importance = np.mean(all_feature_importances, axis=0)
 
     # Use the last trained models for saving (they're equivalent)
-    lgb_models, ridge_model = all_models[-1], all_ridge_models[-1]
+    lgb_models, ridge_model = all_lgb_models[-1], all_ridge_models[-1]
 
     print(f"Ensemble predictions range: [{predictions.min():.2f}, {predictions.max():.2f}]")
     print(f"Ensemble predictions mean: {predictions.mean():.2f}, median: {np.median(predictions):.2f}")
@@ -194,7 +238,6 @@ def main():
     print("Saving Models")
     print("=" * 80)
     
-    import pickle
     os.makedirs(CACHE_DIR, exist_ok=True)
     model_path = os.path.join(CACHE_DIR, 'trained_models.pkl')
     
