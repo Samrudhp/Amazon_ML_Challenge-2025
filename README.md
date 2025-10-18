@@ -2,7 +2,7 @@
 
 ## Overview
 
-Complete end-to-end ML pipeline for product price prediction using multimodal features (text, images, numeric) with RAG-enhanced predictions. Achieves **~9.5-10.5% SMAPE** on CPU-friendly architecture.
+Complete end-to-end ML pipeline for product price prediction using multimodal features (text, images, numeric) with RAG-enhanced predictions. 
 
 ## Quick Start
 
@@ -110,12 +110,6 @@ This will:
 ```bash
 python src/inference.py
 ```
-
-## Memory Requirements
-- **RAM**: ~16GB (CPU-friendly)
-- **Storage**: ~5GB (images + embeddings cache)
-- **Runtime**: 30-60 minutes (full pipeline)
-
 ## Key Features
 
 ✅ **Multimodal Fusion**: Text + Image + Numeric features  
